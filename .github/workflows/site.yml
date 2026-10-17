@@ -1,0 +1,87 @@
+name: Publish dashboard
+
+on:
+  # GitHub's schedule runs in UTC. Eastern evening games fall after
+  # midnight UTC, so each window below is shifted to match. The windows
+  # are a few hours wide on purpose so they still cover the games after
+  # daylight saving time ends.
+  schedule:
+    - cron: "*/5 0-5 * * 5"     # Thursday night games
+    - cron: "*/5 13-23 * * 0"   # Sunday, from the London kickoffs on
+    - cron: "*/5 0-5 * * 1"     # Sunday night game
+    - cron: "*/5 22-23 * * 1"   # early Monday night kickoffs
+    - cron: "*/5 0-5 * * 2"     # Monday night game
+    - cron: "17 * * * *"        # hourly otherwise, off the top of the hour
+  # Uploading a file rebuilds right away.
+  push:
+    branches: [main]
+  # The "Run workflow" button in the Actions tab.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One build at a time. A run that starts while another is going waits.
+concurrency:
+  group: site
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install httpx truststore python-dotenv openpyxl fastapi apscheduler
+
+      # The database from the last run, so imports only rerun when a file
+      # changes. If it's ever missing, the build starts fresh from imports/.
+      - name: Restore the database
+        uses: actions/cache/restore@v4
+        with:
+          path: football.db
+          key: db-${{ github.run_id }}
+          restore-keys: db-
+
+      - name: Build
+        env:
+          TZ: America/New_York
+          ESPN_S2: ${{ secrets.ESPN_S2 }}
+          ESPN_SWID: ${{ secrets.ESPN_SWID }}
+          ESPN_LEAGUE_ID: "1151985"
+          ESPN_TEAM_ID: "12"
+          ESPN_SEASON_ID: "2026"
+          YAHOO_LEAGUE_2_ID: "1335544"
+          YAHOO_TEAM_2_ID: "3"
+        run: python build_site.py
+
+      - name: Save the database
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: football.db
+          key: db-${{ github.run_id }}
+
+      - name: Prepare the site
+        uses: actions/configure-pages@v5
+
+      - name: Package the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Publish
+        id: deployment
+        uses: actions/deploy-pages@v4
