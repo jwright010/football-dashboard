@@ -17,6 +17,7 @@ succeed until the game is final.
 """
 
 import logging
+import math
 import re
 from datetime import datetime, timezone
 
@@ -126,7 +127,7 @@ def _goal(kind, label, team, rest):
                 direction = match.group("dir").lower()
                 target = float(match.group("target"))
                 if direction in ("at least", "atleast"):
-                    direction, target = "over", target - 1
+                    direction, target = "over", _at_least(target)
                 return {"kind": "team", "label": label, "team": team,
                         "stat": stat, "direction": direction, "target": target}
             if stat:
@@ -149,7 +150,7 @@ def _goal(kind, label, team, rest):
     direction = match.group("dir").lower()
     target = float(match.group("target"))
     if direction in ("at least", "atleast"):
-        direction, target = "over", target - 1
+        direction, target = "over", _at_least(target)
 
     return {"kind": "player", "label": label, "team": team,
             "stat": stat, "direction": direction, "target": target}
@@ -176,8 +177,27 @@ def parse_text(text):
 # Import
 # ---------------------------------------------------------------------
 
+def _at_least(target):
+    """Turn "at least N" into the equivalent "over" target.
+
+    Every stat here counts in whole numbers, so "at least N" means the
+    first whole number at or above N. Subtracting 1 only works when N is
+    whole: "at least 26.5" means 27 or more, which is "over 26", not
+    "over 25.5". Rounding N up first handles both.
+    """
+    return float(math.ceil(target) - 1)
+
+
+# Spellings people type that aren't the canonical abbreviation.
+TEAM_ALIASES = {
+    "JAC": "JAX", "ARZ": "ARI", "GNB": "GB", "KAN": "KC", "NOR": "NO",
+    "NWE": "NE", "SFO": "SF", "TAM": "TB", "LVR": "LV", "WAS": "WSH",
+}
+
+
 def team_row(conn, abbrev):
     text = (abbrev or "").strip().upper()
+    text = TEAM_ALIASES.get(text, text)
     return conn.execute(
         """
         SELECT id, espn_id, abbrev_canonical FROM team
