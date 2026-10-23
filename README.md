@@ -293,7 +293,7 @@ stays visible in every view and on every tab, so switching is always one click.
 | Fantasy | Each head-to-head, colored by projected margin |
 | Rooting Interests | Every goal with a progress bar and an on-track verdict. Goals still in play first, then not started, then goals already decided in a live game, then finished games |
 | BOZO | Your BOZO interests as cards in the Top Players style, without fantasy lines: logo and name; team and position; the game line, amber while live; your wording with the live number. Moneylines and spreads show the team's current margin, like "+3". The number is green when hit or on track, red when missed or off track, and gray before kickoff. Two summary lines sit on top: "X of Y hit" and "X in play, Y remaining, Z finished". Finished counts goals settled either way, including one decided while its game is still going, so the three numbers always add up to the total. |
-| Teams | Every game in three columns, with your pick and your interests |
+| Teams | Every game in three columns, with your pick and your interests. While a game is live, your own fantasy starters in it also show as outlined chips, by name only; a player starting for you in several leagues gets one chip. |
 
 **Fantasy colors** compare your projected final against your opponent's:
 green for a projected win by more than 20, red for a projected loss by more

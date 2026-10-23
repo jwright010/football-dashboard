@@ -770,6 +770,11 @@ PAGE = """<!doctype html>
   .gc-pick.tied { color: var(--close); }
   .gc-pick.pending, .gc-pick.push, .gc-pick.none { color: var(--pending); font-weight: 400; }
   .gc-root { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.45rem; }
+  .gc-fan { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.45rem; }
+  .fan-chip {
+    font-size: 0.72rem; font-weight: 600; white-space: nowrap; color: var(--text);
+    border: 1px solid var(--dim); border-radius: 999px; padding: 0.1rem 0.55rem;
+  }
 
   @media (max-width: 70rem) { .teams-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 50rem) { .cols2, .ri-grid, .teams-grid { grid-template-columns: 1fr; } }
@@ -1578,7 +1583,7 @@ function bozoCard(g, data) {
   </div>`;
 }
 
-function gameCard(g, pick, interests) {
+function gameCard(g, pick, interests, fantasy) {
   const final = g.state === "post";
   const cls = g.is_live ? "is-live" : (final ? "is-final" : "");
   const awayWins = final && g.away_score > g.home_score;
@@ -1617,7 +1622,20 @@ function gameCard(g, pick, interests) {
     <div class="gc-status">${status}</div>
     ${pickLine}
     ${chips}
+    ${fantasyChips(fantasy || [])}
   </div>`;
+}
+
+// Your fantasy starters playing in a live game, by name only. Outlined, so
+// they read apart from the colored rooting chips. One chip per player, even
+// when he starts for you in more than one league.
+function fantasyChips(players) {
+  if (!players.length) return "";
+  return `<div class="gc-fan">${players.map(p => {
+    const parts = p.name.split(" ");
+    const who = parts.length < 2 ? p.name : parts.slice(1).join(" ");
+    return `<span class="fan-chip" title="${attr(p.name + " \u00b7 fantasy starter")}">${esc(who)}</span>`;
+  }).join("")}</div>`;
 }
 
 // Live games first, then games carrying rooting interests, then the rest.
@@ -1632,6 +1650,13 @@ function tabTeams(data) {
     if (!i.event_id) return;
     (byGame[i.event_id] = byGame[i.event_id] || []).push(i);
   });
+  // Your fantasy starters in games being played right now.
+  const fantasyByGame = {};
+  const everyone = (data.players && (data.players.all || data.players.players)) || [];
+  everyone
+    .filter(p => p.fantasy && p.fantasy.length && p.game && p.game.is_live && p.game.event_id)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach(p => { (fantasyByGame[p.game.event_id] = fantasyByGame[p.game.event_id] || []).push(p); });
   const group = g => g.is_live ? 0 : ((byGame[g.event_id] || []).length ? 1 : 2);
   const ordered = games
     .map((g, index) => ({ g, index }))
@@ -1641,7 +1666,7 @@ function tabTeams(data) {
       || a.index - b.index)
     .map(x => x.g);
   return `<div class="teams-grid">${ordered.map(g =>
-    gameCard(g, picks[g.event_id], byGame[g.event_id] || [])).join("")}</div>`;
+    gameCard(g, picks[g.event_id], byGame[g.event_id] || [], fantasyByGame[g.event_id])).join("")}</div>`;
 }
 
 function renderTV(data) {
