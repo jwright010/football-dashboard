@@ -156,6 +156,14 @@ def _goal(kind, label, team, rest):
             "stat": stat, "direction": direction, "target": target}
 
 
+# Tags a line can end with, in either order:
+#   [BOZO]           shows the goal on the BOZO tab
+#   {your wording}   shown on the page in place of the generated text
+# The spreadsheet importer adds both; a text file can use them too.
+BOZO_TAG = re.compile(r"\s*\[bozo\]\s*$", re.IGNORECASE)
+WORDING_TAG = re.compile(r"\s*\{([^{}]*)\}\s*$")
+
+
 def parse_text(text):
     """Parse a whole block. Returns (goals, errors)."""
     goals, errors = [], []
@@ -163,7 +171,21 @@ def parse_text(text):
         line = raw.strip()
         if not line or line.startswith("#") or line.lower().startswith("week"):
             continue
+        bozo, wording = False, None
+        while True:
+            if BOZO_TAG.search(line):
+                bozo, line = True, BOZO_TAG.sub("", line)
+                continue
+            match = WORDING_TAG.search(line)
+            if match:
+                wording = match.group(1).strip() or None
+                line = line[:match.start()]
+                continue
+            break
         parsed = parse_line(line)
+        if parsed is not None and "error" not in parsed:
+            parsed["bozo"] = bozo
+            parsed["wording"] = wording
         if parsed is None:
             errors.append(f"Could not read line: {line!r}")
         elif "error" in parsed:
@@ -244,7 +266,7 @@ def import_goals(season, week, goals, chooser=None, replace=True):
                 problems.append(f"{goal['label']}: unknown team {goal['team']!r}")
                 continue
 
-            athlete_id, display = None, goal["label"]
+            athlete_id, display, position = None, goal["label"], None
             if goal["kind"] == "player":
                 try:
                     athlete = resolve_player(team["espn_id"], goal["label"], chooser)
@@ -268,20 +290,25 @@ def import_goals(season, week, goals, chooser=None, replace=True):
                     continue
                 athlete_id = athlete["athlete_id"]
                 display = athlete["name"]
+                position = athlete.get("position") or None
 
             conn.execute(
                 """
                 INSERT INTO rooting
                     (season, week, kind, label, team_id, athlete_id,
-                     stat, direction, target, entered_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?)
+                     stat, direction, target, entered_at, bozo, wording, position)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(season, week, kind, label, stat, direction, target)
                 DO UPDATE SET athlete_id = excluded.athlete_id,
                               team_id    = excluded.team_id,
-                              entered_at = excluded.entered_at
+                              entered_at = excluded.entered_at,
+                              bozo       = excluded.bozo,
+                              wording    = excluded.wording,
+                              position   = excluded.position
                 """,
                 (season, week, goal["kind"], display, team["id"], athlete_id,
-                 goal["stat"], goal["direction"], goal["target"], now),
+                 goal["stat"], goal["direction"], goal["target"], now,
+                 1 if goal.get("bozo") else 0, goal.get("wording"), position),
             )
             stored += 1
 
@@ -445,7 +472,8 @@ def week_detail(season, week):
     try:
         rows = conn.execute(
             """
-            SELECT r.*, t.abbrev_canonical AS team_abbrev, t.espn_id AS team_espn
+            SELECT r.*, t.abbrev_canonical AS team_abbrev, t.espn_id AS team_espn,
+                   t.display_name AS team_name
             FROM rooting r
             JOIN team t ON t.id = r.team_id
             WHERE r.season = ? AND r.week = ?
@@ -555,6 +583,10 @@ def week_detail(season, week):
         results.append({
             "id": r["id"],
             "kind": r["kind"],
+            "bozo": bool(r["bozo"]) if "bozo" in r.keys() else False,
+            "wording": r["wording"] if "wording" in r.keys() else None,
+            "position": (r["position"] if "position" in r.keys() else None) or "",
+            "team_name": r["team_name"],
             "athlete_id": r["athlete_id"],
             "event_id": game["event_id"] if game else None,
             "label": r["label"],
@@ -564,7 +596,9 @@ def week_detail(season, week):
             "direction": r["direction"],
             "target": r["target"],
             "target_text": target_text,
-            "goal_text": goal_text,
+            # Your wording wins wherever the goal is described.
+            "goal_text": (r["wording"] if "wording" in r.keys() and r["wording"]
+                          else goal_text),
             "current": current,
             "status": status,
             "progress": _progress(r["direction"], r["target"], current),

@@ -719,6 +719,37 @@ PAGE = """<!doctype html>
   .ri.final_hit .ri-now,  .ri.final_miss .ri-now,
   .ri.final_hit .ri-pct,  .ri.final_miss .ri-pct { color: var(--pending); }
 
+  /* ---------- BOZO tab ---------- */
+  .bozo-summary {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 0.5rem; padding: 0.9rem 1.1rem; margin: 0.75rem 0 1rem;
+  }
+  .bozo-hit { font-size: 1.2rem; font-weight: 600; }
+  .bozo-hit b { font-size: 1.9rem; margin-right: 0.2rem; }
+  .bozo-states { margin-top: 0.3rem; font-size: 0.9rem; color: var(--dim); }
+  .bz-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  @media (max-width: 50rem) { .bz-grid { grid-template-columns: 1fr; } }
+  .bz-card {
+    display: flex; gap: 0.9rem; align-items: flex-start;
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 0.5rem; padding: 1rem 1.2rem;
+  }
+  .bz-grid .bz-card .logo { width: 3rem; height: 3rem; flex-basis: 3rem; }
+  .bz-body { flex: 1 1 auto; min-width: 0; }
+  .bz-name { font-size: 1.35rem; font-weight: 500; line-height: 1.2; }
+  .bz-meta { font-size: 0.8rem; color: var(--faint); margin-top: 0.15rem; }
+  .bz-when { font-size: 0.8rem; color: var(--faint); margin-top: 0.15rem; }
+  .bz-when.is-live { color: var(--live); }
+  .bz-goal {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 0.8rem; margin-top: 0.55rem;
+  }
+  .bz-detail { font-size: 0.95rem; color: var(--dim); }
+  .bz-stat { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bz-stat.good { color: var(--ahead); }
+  .bz-stat.bad  { color: var(--behind); }
+  .bz-stat.wait { color: var(--pending); }
+
   /* ---------- Teams tab ---------- */
   .teams-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.9rem; }
   .gcard {
@@ -782,7 +813,7 @@ PAGE = """<!doctype html>
     <div class="head-right">
       <div class="modes" role="group" aria-label="View">
         <button type="button" data-mode="desk" class="on" aria-pressed="true">Standard</button>
-        <button type="button" data-mode="tv" aria-pressed="false">TV</button>
+        <button type="button" data-mode="tv" aria-pressed="false">Views</button>
         <button type="button" data-mode="focus" aria-pressed="false">Top Players</button>
       </div>
       <div class="meta">
@@ -1348,11 +1379,11 @@ function playersList(players, emptyText) {
 
 const TABS = [
   ["home", "Home"], ["players", "My Players"], ["fantasy", "Fantasy"],
-  ["rooting", "Rooting Interests"], ["teams", "Teams"],
+  ["rooting", "Rooting Interests"], ["bozo", "BOZO"], ["teams", "Teams"],
 ];
 
 function tabBar() {
-  return `<nav class="tabs" aria-label="TV sections">${TABS.map(([key, label]) =>
+  return `<nav class="tabs" aria-label="Views sections">${TABS.map(([key, label]) =>
     `<button type="button" data-tab="${key}" class="${TAB === key ? "on" : ""}"
        aria-pressed="${TAB === key}">${label}</button>`).join("")}</nav>`;
 }
@@ -1448,13 +1479,103 @@ function rootingGroup(g) {
   return 0;
 }
 
-function tabRooting(data) {
-  const items = ((data.rooting && data.rooting.items) || []).slice();
-  if (!items.length) return `<div class="note">No rooting interests imported for this week.</div>`;
-  items.sort((a, b) =>
+function sortRooting(items) {
+  return items.slice().sort((a, b) =>
     rootingGroup(a) - rootingGroup(b)
     || TRACK_ORDER.indexOf(a.track) - TRACK_ORDER.indexOf(b.track));
-  return `<div class="ri-grid">${items.map(rootingRow).join("")}</div>`;
+}
+
+function tabRooting(data) {
+  const items = (data.rooting && data.rooting.items) || [];
+  if (!items.length) return `<div class="note">No rooting interests imported for this week.</div>`;
+  return `<div class="ri-grid">${sortRooting(items).map(rootingRow).join("")}</div>`;
+}
+
+// Counts for the BOZO summary. Finished = settled, won or lost, including a
+// goal decided while its game is still going. In play = still undecided in
+// a live game. Remaining = game not started. The three always add up.
+function bozoCounts(items) {
+  const closed = items.filter(i =>
+    i.status === "achieved" || i.status === "failed"
+    || i.track === "final_hit" || i.track === "final_miss").length;
+  const remaining = items.filter(i => i.track === "pending").length;
+  return {
+    total: items.length,
+    hit: items.filter(i => i.status === "achieved").length,
+    closed,
+    remaining,
+    inPlay: items.length - closed - remaining,
+  };
+}
+
+function tabBozo(data) {
+  const items = ((data.rooting && data.rooting.items) || []).filter(i => i.bozo);
+  if (!items.length) {
+    return `<div class="note">No rooting interests are marked BOZO this week.</div>`;
+  }
+  const c = bozoCounts(items);
+  return `<div class="bozo-summary">
+      <div class="bozo-hit"><b>${c.hit}</b> of ${c.total} hit</div>
+      <div class="bozo-states">${c.inPlay} in play, ${c.remaining} remaining, ${c.closed} finished</div>
+    </div>
+    <div class="bz-grid">${sortRooting(items).map(g => bozoCard(g, data)).join("")}</div>`;
+}
+
+// The live number beside each BOZO goal. Moneylines and spreads show the
+// team's current margin; everything else shows the stat itself.
+function bozoStat(g, data) {
+  if (g.track === "pending") return "\u2013";
+  if (g.stat === "win" || g.stat === "win_by") {
+    const game = (data.games || []).find(x => x.event_id === g.event_id);
+    if (!game || game.state === "pre") return "\u2013";
+    const home = game.home === g.team;
+    const margin = (home ? game.home_score : game.away_score)
+                 - (home ? game.away_score : game.home_score);
+    return margin > 0 ? `+${margin}` : String(margin);
+  }
+  if (g.current === null || g.current === undefined) return "\u2013";
+  return Number.isInteger(g.current) ? String(g.current) : g.current.toFixed(1);
+}
+
+const BOZO_STAT_CLASS = {
+  on: "good", final_hit: "good", off: "bad", final_miss: "bad", pending: "wait",
+};
+
+// The game line, worded as on Top Players.
+function bozoWhen(g, data) {
+  const game = (data.games || []).find(x => x.event_id === g.event_id);
+  if (!game) return { text: "no game this week", live: false };
+  const home = game.home === g.team;
+  const opp = home ? game.away : game.home;
+  const score = `${esc(g.team)} ${home ? game.home_score : game.away_score}, ` +
+                `${esc(opp)} ${home ? game.away_score : game.home_score}`;
+  if (game.is_live) {
+    const left = game.remaining ? ` &middot; ${esc(game.remaining)} left` : "";
+    return { text: `${score} &middot; ${esc(game.label)}${left}`, live: true };
+  }
+  if (game.state === "post") return { text: `${score} &middot; ${esc(game.label)}`, live: false };
+  return { text: `vs ${esc(opp)} &middot; not started`, live: false };
+}
+
+// Top Players layout without fantasy lines: logo and name; team and
+// position; the game line; then your wording with the live number.
+function bozoCard(g, data) {
+  const name = g.kind === "team" ? (g.team_name || g.team) : g.label;
+  const meta = g.kind === "player" && g.position
+    ? `${esc(g.team)} &middot; ${esc(g.position)}` : esc(g.team);
+  const when = bozoWhen(g, data);
+  return `<div class="bz-card" data-k="${attr("r:" + g.id)}">
+    ${logoTag(g.team)}
+    <div class="bz-body">
+      <div class="bz-name">${esc(name)}</div>
+      <div class="bz-meta">${meta}</div>
+      <div class="bz-when${when.live ? " is-live" : ""}"${g.event_id ? ` data-k="${attr("g:" + g.event_id)}"` : ""}>${when.text}</div>
+      <div class="bz-goal">
+        <span class="bz-detail">${esc(g.goal_text)}</span>
+        <span class="bz-stat ${BOZO_STAT_CLASS[g.track] || ""}">${bozoStat(g, data)}</span>
+      </div>
+    </div>
+  </div>`;
 }
 
 function gameCard(g, pick, interests) {
@@ -1526,7 +1647,7 @@ function tabTeams(data) {
 function renderTV(data) {
   const body = {
     home: tabHome, players: tabPlayers, fantasy: tabFantasy,
-    rooting: tabRooting, teams: tabTeams,
+    rooting: tabRooting, bozo: tabBozo, teams: tabTeams,
   }[TAB] || tabHome;
   return tabBar() + body(data);
 }

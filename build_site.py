@@ -47,6 +47,14 @@ OUT = ROOT / "_site"
 # corporate network in the way.
 LOGO = "https://a.espncdn.com/i/teamlogos/nfl/500/{lower}.png"
 
+# Raise this whenever the way files are imported changes. Every file then
+# imports again on the next run, so the order code and data files are
+# uploaded in never matters.
+#   2: BOZO column; columns read by header name
+#   3: Revised wording, unders with "-", position and wording stored
+#   4: without a BOZO? column, nothing is marked BOZO
+IMPORT_VERSION = "4"
+
 # A problem worded this way came from ESPN refusing a roster lookup,
 # which usually clears on its own, so that file is tried again next run.
 RETRY_MARKER = "Re-run the import"
@@ -71,7 +79,7 @@ CREATE TABLE IF NOT EXISTS build_meta (
 # ---------------------------------------------------------------------
 
 def _digest(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(IMPORT_VERSION.encode() + path.read_bytes()).hexdigest()
 
 
 def _state(name):

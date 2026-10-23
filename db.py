@@ -66,6 +66,9 @@ CREATE TABLE IF NOT EXISTS rooting (
     direction    TEXT    NOT NULL,          -- 'over' or 'under'
     target       REAL    NOT NULL,
     entered_at   TEXT    NOT NULL,
+    bozo         INTEGER NOT NULL DEFAULT 0,   -- marked Yes in the BOZO column
+    wording      TEXT,                      -- your own wording, from the Revised column
+    position     TEXT,                      -- player position, from the roster
     UNIQUE (season, week, kind, label, stat, direction, target)
 );
 
@@ -128,10 +131,29 @@ def connect():
     return conn
 
 
+def _add_missing_columns(conn):
+    """Bring an older database up to date without losing anything.
+
+    CREATE TABLE IF NOT EXISTS never changes a table that already exists,
+    so columns added after a database was made are added here.
+    """
+    have = {row["name"] for row in conn.execute("PRAGMA table_info(rooting)")}
+    added = {
+        "bozo": "INTEGER NOT NULL DEFAULT 0",
+        "wording": "TEXT",
+        "position": "TEXT",
+    }
+    for name, kind in added.items():
+        if name not in have:
+            conn.execute(f"ALTER TABLE rooting ADD COLUMN {name} {kind}")
+    conn.commit()
+
+
 def init():
     """Create tables and seed teams. Safe to run repeatedly."""
     conn = connect()
     conn.executescript(SCHEMA)
+    _add_missing_columns(conn)
     conn.executemany(
         """
         INSERT INTO team
