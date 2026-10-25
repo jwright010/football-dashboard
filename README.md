@@ -594,6 +594,15 @@ laptop's, and clear each new week.
 cookie rotates and the ESPN card fails; copy the new value into the `ESPN_S2`
 secret. League and team ids sit in the workflow file; they aren't secret.
 
+**Embedding the BOZO view.** Add `?view=bozo` to the end of the phone page's
+link to open only the BOZO summary and cards, for an Embed box in a Google Site
+or another page. The view buttons, tabs, and import notices are hidden; the
+week title and the "As of" line stay. Text uses normal sizes, not the Views
+scaling, and cards drop to one column in a narrow box. The page is dark, so it
+shows as a dark panel on a light site. Only the phone version can be embedded;
+the laptop's address points to each visitor's own computer. Any other value
+after `view=` is ignored and the page opens normally.
+
 **Visibility.** The page is public: anyone with the link can see team names,
 picks, and rooting interests. Never upload `.env` or `yahoo_token.json`.
 

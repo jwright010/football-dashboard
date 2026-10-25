@@ -719,6 +719,11 @@ PAGE = """<!doctype html>
   .ri.final_hit .ri-now,  .ri.final_miss .ri-now,
   .ri.final_hit .ri-pct,  .ri.final_miss .ri-pct { color: var(--pending); }
 
+  /* ---------- embed: ?view=bozo ---------- */
+  html.embed .modes { display: none; }
+  html.embed body { padding: 0.75rem; }
+  html.embed .wrap { max-width: none; }
+
   /* ---------- BOZO tab ---------- */
   .bozo-summary {
     background: var(--surface); border: 1px solid var(--rule);
@@ -845,6 +850,13 @@ const GROUPS = [
 // The phone build sets window.STATIC_SITE before this script runs. On the
 // local server it is absent and everything behaves as before.
 const SITE = window.STATIC_SITE || null;
+
+// A link ending in ?view=bozo shows only the BOZO summary and cards, for
+// embedding in another page such as a Google Site. The view buttons, tabs,
+// and import notices are hidden; the title and the "As of" line stay.
+// Any other value is ignored and the page opens normally.
+const EMBED = new URLSearchParams(location.search).get("view") === "bozo";
+if (EMBED) document.documentElement.classList.add("embed");
 
 function logoUrl(abbrev) {
   return SITE
@@ -1860,6 +1872,15 @@ function renderHeader(data) {
 
 function render(data) {
   renderHeader(data);
+  if (EMBED) {
+    for (const id of ["fantasy", "board", "focus", "notices"]) {
+      document.getElementById(id).hidden = true;
+    }
+    const box = document.getElementById("tv");
+    box.hidden = false;
+    box.innerHTML = tabBozo(data);
+    return;
+  }
   renderNotices(data);
   const shown = {
     fantasy: MODE === "desk", board: MODE === "desk",
