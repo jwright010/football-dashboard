@@ -143,6 +143,33 @@ NUMBERED = re.compile(
     r"^(?P<subject>.+?)\s+(?P<number>\d+(?:\.\d+)?)\s*(?P<sign>[+-])\s*(?P<stat>\S.*)$"
 )
 
+# Spreads written the way sportsbooks print them, with the sign in front:
+#   San Francisco 49ers -2.5 Spread   favored by 2.5, so wins by 3 or more
+# Only half-point lines are read. A whole-number line can push, and a "+"
+# line means an underdog covering, so both are reported, never guessed.
+SPREAD_FAVORITE = re.compile(
+    r"^(?P<subject>.+?)\s+-(?P<number>\d+(?:\.\d+)?)\s+spread$", re.IGNORECASE
+)
+SPREAD_UNDERDOG = re.compile(
+    r"^(?P<subject>.+?)\s+\+(?P<number>\d+(?:\.\d+)?)\s+spread$", re.IGNORECASE
+)
+
+# Longer spellings of the stat words, so "Rushing + Receiving Yds" and
+# "Receptions" read the same as "Rush + Rec Yds" and "Rec".
+WORD_FIXES = (
+    (r"\brushing\b", "rush"), (r"\breceiving\b", "rec"),
+    (r"\breceptions?\b", "rec"), (r"\bcatches\b", "rec"),
+    (r"\bpassing\b", "pass"), (r"\byards?\b", "yds"),
+    (r"\btouchdowns?\b", "td"), (r"\btds\b", "td"),
+)
+
+
+def _fix_words(words):
+    for pattern, replacement in WORD_FIXES:
+        words = re.sub(pattern, replacement, words)
+    return words
+
+
 # Team stats, by the words you'd type after the number.
 TEAM_WORDS = {
     "spread": "win by",
@@ -191,6 +218,21 @@ def parse_revised(text, team):
         name = match.group("subject").strip()
         return f"{name} ({team}) any TD", wording[len(name):].strip()
 
+    match = SPREAD_FAVORITE.match(wording)
+    if match:
+        number = match.group("number")
+        if float(number).is_integer():
+            return None, (f"{wording!r}: a whole-number spread can push. Write "
+                          f"\"{number}.5+ Spread\" for a win by {int(number) + 1} "
+                          f"or more, or \"{number}+ Spread\" for a win by {number} or more")
+        return f"{team} win by at least {number}", wording
+
+    match = SPREAD_UNDERDOG.match(wording)
+    if match:
+        return None, (f"{wording!r}: a \"+\" spread means an underdog covering, which "
+                      "isn't read. Write it as \"3.5+ Spread\" after the team's name "
+                      "for a win by 4 or more")
+
     match = NUMBERED.match(wording)
     if not match:
         return None, (f"{wording!r}: couldn't read it. Use forms like "
@@ -209,6 +251,7 @@ def parse_revised(text, team):
                           "as in \"Panthers 3.5+ Spread\"")
         return f"{team} {team_stat} {direction} {number}", wording
 
+    words = _fix_words(words)
     phrase = STAT_WORDS.get(words, words)
     if boxscore.resolve_stat(phrase) is None:
         return None, (f"{wording!r}: unknown stat {match.group('stat')!r}. "

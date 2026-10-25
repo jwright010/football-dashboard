@@ -53,7 +53,8 @@ LOGO = "https://a.espncdn.com/i/teamlogos/nfl/500/{lower}.png"
 #   2: BOZO column; columns read by header name
 #   3: Revised wording, unders with "-", position and wording stored
 #   4: without a BOZO? column, nothing is marked BOZO
-IMPORT_VERSION = "4"
+#   5: "-2.5 Spread" lines, and "Rushing + Receiving Yds" style stat names
+IMPORT_VERSION = "5"
 
 # A problem worded this way came from ESPN refusing a roster lookup,
 # which usually clears on its own, so that file is tried again next run.
