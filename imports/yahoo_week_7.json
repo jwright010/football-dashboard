@@ -1,0 +1,33 @@
+{
+  "season": 2026,
+  "week": 7,
+  "league": "752951",
+  "me": {
+    "name": "Sunscreen and Tums",
+    "lineup": [
+      ["QB", "B. Purdy", "SF"],
+      ["RB", "Bijan Robinson", "ATL"],
+      ["RB", "D. Swift", "CHI"],
+      ["WR", "A.J. Brown", "NE"],
+      ["WR", "D. Vele", "NO"],
+      ["TE", "B. Bowers", "LV"],
+      ["W/R/T", "J. Williams", "DET"],
+      ["K", "K. Fairbairn", "HOU"],
+      ["DEF", "Broncos", "DEN"]
+    ]
+  },
+  "opponent": {
+    "name": "Hawaiian Punch",
+    "lineup": [
+      ["QB", "P. Mahomes", "KC"],
+      ["RB", "J. Warren", "PIT"],
+      ["RB", "K. Williams", "LAR"],
+      ["WR", "Z. Flowers", "BAL"],
+      ["WR", "J. Chase", "CIN"],
+      ["TE", "S. LaPorta", "DET"],
+      ["W/R/T", "A. Jones Sr.", "MIN"],
+      ["K", "W. Reichard", "MIN"],
+      ["DEF", "Texans", "HOU"]
+    ]
+  }
+}
