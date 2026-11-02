@@ -170,11 +170,18 @@ def _fix_words(words):
     return words
 
 
-# Team stats, by the words you'd type after the number.
+# Team stats, by the words you'd type after the number. "Total Pts" is that
+# team's own score; "Game Total" is both teams' scores combined, since the
+# box score already knows who they're playing. Either team in the Team
+# column reads the same game, so it doesn't matter which one you pick.
 TEAM_WORDS = {
     "spread": "win by",
     "total pts": "points", "total points": "points", "team total": "points",
     "pts": "points", "points": "points",
+    # The generated line is reread by rooting.parse_text, which expects
+    # "game total" with a space, not the code's internal "game_total".
+    "game total": "game total", "combined points": "game total",
+    "combined score": "game total", "total score": "game total",
 }
 
 # Common betting words the stat list doesn't already know.
@@ -260,6 +267,33 @@ def parse_revised(text, team):
             wording[len(name):].strip())
 
 
+class _CsvSheet:
+    """A CSV file dressed as a one-tab workbook, so it reads like the .xlsx.
+
+    The Google Sheet's "Send to dashboard" checkbox writes the "Rooting
+    Revised" tab as a CSV, and it is read with the same header rules.
+    """
+
+    def __init__(self, path):
+        import csv
+        with open(path, newline="", encoding="utf-8-sig") as handle:
+            self.rows = [tuple(row) for row in csv.reader(handle)]
+        self.title = "Rooting Revised (from the Google Sheet)"
+
+    def iter_rows(self, min_row=1, max_row=None, values_only=True):
+        end = len(self.rows) if max_row is None else min(max_row, len(self.rows))
+        for row in self.rows[min_row - 1:end]:
+            yield row
+
+    def __getitem__(self, ref):
+        column = ord(ref[0].upper()) - ord("A")
+        row = int(ref[1:]) - 1
+        value = None
+        if row < len(self.rows) and column < len(self.rows[row]):
+            value = self.rows[row][column] or None
+        return type("Cell", (), {"value": value})()
+
+
 def read_workbook(path, info=None):
     """Turn the rooting tab into text lines. Returns (week, lines, notes).
 
@@ -273,8 +307,18 @@ def read_workbook(path, info=None):
             "Reading .xlsx needs openpyxl. Run: pip install openpyxl"
         )
 
-    workbook = load_workbook(path, data_only=True)
-    sheet, header_row, columns, mode = pick_sheet(workbook)
+    if str(path).lower().endswith(".csv"):
+        sheet = _CsvSheet(path)
+        found = _find_header(sheet)
+        if not found:
+            raise RuntimeError(
+                "The CSV has no Revised and Team header, "
+                "or Player, Team, and Stat headers."
+            )
+        header_row, columns, mode = found
+    else:
+        workbook = load_workbook(path, data_only=True)
+        sheet, header_row, columns, mode = pick_sheet(workbook)
     if info is not None:
         info["sheet"] = sheet.title
         info["mode"] = mode
@@ -405,7 +449,7 @@ def main():
         print("No games stored yet. Run: python poller.py")
         return 1
 
-    if path.lower().endswith((".xlsx", ".xlsm")):
+    if path.lower().endswith((".xlsx", ".xlsm", ".csv")):
         try:
             info = {}
             week, lines, notes = read_workbook(path, info)

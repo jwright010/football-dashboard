@@ -54,7 +54,9 @@ LOGO = "https://a.espncdn.com/i/teamlogos/nfl/500/{lower}.png"
 #   3: Revised wording, unders with "-", position and wording stored
 #   4: without a BOZO? column, nothing is marked BOZO
 #   5: "-2.5 Spread" lines, and "Rushing + Receiving Yds" style stat names
-IMPORT_VERSION = "5"
+#   6: rooting_interests.csv sent by the Google Sheet's checkbox
+#   7: "Game Total" reads as both teams' combined score
+IMPORT_VERSION = "7"
 
 # A problem worded this way came from ESPN refusing a roster lookup,
 # which usually clears on its own, so that file is tried again next run.
@@ -207,7 +209,7 @@ def _import_picks(season, current_week):
 
 def _import_rooting(season):
     def importer(path):
-        if path.suffix.lower() in (".xlsx", ".xlsm"):
+        if path.suffix.lower() in (".xlsx", ".xlsm", ".csv"):
             week, lines, problems = import_rooting.read_workbook(str(path))
             text = "\n".join(lines)
         else:
@@ -220,7 +222,10 @@ def _import_rooting(season):
         return list(problems) + list(errors) + list(more)
 
     notes = []
-    paths = sorted(IMPORTS.glob("rooting*.xlsx")) + sorted(IMPORTS.glob("rooting*.txt"))
+    # The CSV from the Google Sheet goes last, so when files share a week
+    # and all re-import, the sheet's latest send is the one that stands.
+    paths = (sorted(IMPORTS.glob("rooting*.xlsx")) + sorted(IMPORTS.glob("rooting*.txt"))
+             + sorted(IMPORTS.glob("rooting*.csv")))
     for path in paths:
         notes += _run_import(path, importer)
     return notes
