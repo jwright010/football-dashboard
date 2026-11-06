@@ -76,6 +76,8 @@ player-level crosswalk needed.
 | `import_picks.py` | CLI to load a week of picks from JSON |
 | `players.py` | Merges fantasy starters and rooting goals into one list |
 | `build_site.py` | Builds the phone version on GitHub |
+| `sheet_sync.py` | Laptop: imports the Google Sheet's file from GitHub every 2 minutes |
+| `send_to_dashboard.gs` | Google Apps Script for the sheet's Send to dashboard checkbox; lives in the sheet, not GitHub |
 | `pins.py` | Players pinned to Top Players, one set per week |
 | `fetch_logos.py` | One-time download of the 32 team logos |
 | `rooting.py` | Rooting interests: parsing, storage, grading |
@@ -372,10 +374,19 @@ the Team column always decides the team:
 | Davanate Adams Anytime TD | Scores a touchdown |
 | Jaguars Moneyline | Team wins |
 | Patriots 7.5+ Spread | Team wins by more than 7.5, so 8 or more |
+| San Francisco 49ers -2.5 Spread | Same as "2.5+ Spread": favored by 2.5, so wins by 3 or more |
 | Packers 26.5+ Total Pts | Team scores at least 26.5, so 27 or more |
+| ATL vs TB 43.5+ Game Total | The two teams' combined score is at least 43.5, so 44 or more. Either team works in the Team column, since it's the same game. "Combined Points" and "Total Score" read the same way. |
 
 Any stat the importer knows works after the number, such as Rush Yds, Pass Yds,
-Rec Yds, Rec, Rush + Rec Yds, Pass TDs, Completions, Sacks, or Field Goals.
+Rec Yds, Rec, Rush + Rec Yds, Pass TDs, Completions, Sacks, or Field Goals. Longer
+spellings read the same: Rushing Yds, Receiving Yds, Passing Yds, Receptions, and
+Rushing + Receiving Yds.
+
+Spreads with the sign in front are read only for half-point lines on a favorite,
+like "-2.5". A whole-number line can push, and a "+" line means an underdog
+covering, so both are reported as notices; write "3.5+ Spread" for a win by 4 or
+more.
 "Yds" alone is refused, since it could mean rushing or receiving. A line it
 can't read is reported as a notice and skipped, never guessed.
 
@@ -385,6 +396,29 @@ player, the part after his name is shown, since the name already appears.
 **BOZO marks.** A BOZO? column on "Rooting Revised," anywhere in the header
 row, marks goals with Yes or Y. Without that column, nothing shows on the BOZO
 tab, and a notice says so. In a text file, end a line with `[BOZO]`.
+
+**Sending from the Google Sheet.** A "Send to dashboard" checkbox on the
+"Rooting Revised" tab (cell E2, labeled in D2, with its status in F2) sends the
+tab to GitHub as `imports/rooting_interests.csv`. That starts a build right away,
+so the phone shows changes in about 3 to 5 minutes, and the laptop picks them up
+within 2 minutes after that. No export or upload is needed. Deleting a row and
+sending removes that goal, since each import replaces the whole week. The status
+cell reports when it sent, that nothing changed, or why it failed.
+
+The script is `send_to_dashboard.gs`, pasted into the sheet under Extensions,
+Apps Script. It needs two script properties, `GITHUB_TOKEN` (a fine-grained
+GitHub token for this repository only, with Contents set to read and write) and
+`GITHUB_REPO` (`your-username/football-dashboard`), and `installTrigger` run once.
+Anyone who can edit the sheet's script can read the token, so keep edit access
+to yourself. To move the checkbox, change the cell names at the top of the script.
+
+The laptop turns on its sync with `GITHUB_REPO=your-username/football-dashboard`
+in `.env`. It checks GitHub every 2 minutes and sends the last copy's fingerprint,
+so an unchanged answer doesn't count against GitHub's limit of 60 checks an hour
+per network. Problems from the sheet show in the laptop's yellow notice.
+
+There's no separate review step: the page's yellow notice is the check for
+misspelled names and wrong teams.
 
 **The older Player, Team, Stat, Direction, and Target columns** still work on
 any tab that has them.
@@ -593,6 +627,27 @@ laptop's, and clear each new week.
 `ESPN_SWID`, never in the repository. If you log out of ESPN everywhere, the
 cookie rotates and the ESPN card fails; copy the new value into the `ESPN_S2`
 secret. League and team ids sit in the workflow file; they aren't secret.
+
+**Refresh button.** The phone page can have a Refresh button, visible only on
+devices where you've set it up. It asks GitHub to start the "Publish dashboard"
+build, then checks for the new data every 10 seconds and redraws the page when
+it lands, usually 2 to 4 minutes after the press. Setup:
+
+- Create a fine-grained GitHub token for this repository only, with **Actions**
+  set to **Read and write**. The Google Sheet's token can't start builds.
+- On the device, open the phone page's link with `?setup=refresh` added, or tap
+  the week title five times within three seconds, which works from a
+  home-screen app that has no address bar. Paste the token and save.
+- The token is kept in that browser's storage, per browser: a home-screen app
+  and the browser may each need their own setup. It is sent only to GitHub, and
+  never appears in the repository or the page's code.
+- To remove it, open the setup again and choose **Remove token**, and revoke the
+  token under GitHub's Developer settings.
+
+A press can't repeat for 60 seconds. After 6 minutes without new data, the
+button says so and points to the Actions tab. A rejected press, such as an
+expired token, shows the reason and can be retried at once. The button never
+appears on the laptop or in the BOZO embed.
 
 **Embedding the BOZO view.** Add `?view=bozo` to the end of the phone page's
 link to open only the BOZO summary and cards, for an Embed box in a Google Site

@@ -25,6 +25,7 @@ import pins
 import players
 import poller
 import rooting
+import sheet_sync
 from clock import (
     describe,
     format_remaining,
@@ -97,6 +98,14 @@ async def lifespan(app: FastAPI):
     tick()
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.add_job(tick, "interval", seconds=TICK_SECONDS, id="poll")
+    if sheet_sync.enabled():
+        # Rooting interests sent from the Google Sheet, checked every 2
+        # minutes and once right away.
+        scheduler.add_job(sheet_sync.sync_once, "interval",
+                          seconds=sheet_sync.INTERVAL_SECONDS, id="sheet_sync",
+                          next_run_time=datetime.now())
+        log.info("Sheet sync on: checking GitHub for the rooting sheet every %d seconds",
+                 sheet_sync.INTERVAL_SECONDS)
     scheduler.start()
     log.info("Dashboard running at http://localhost:8000")
     yield
@@ -223,6 +232,9 @@ def dashboard_data():
         "pickem": pickem,
         "rooting": rooting_for,
         "players": roster_view,
+        # On the laptop, problems from the Google Sheet show in the same
+        # yellow notice the phone uses. The phone build replaces this.
+        **({"build": {"notes": sheet_sync.notes()}} if sheet_sync.notes() else {}),
     }
 
 
@@ -551,9 +563,11 @@ PAGE = """<!doctype html>
 
 
   /* ---------- view switcher ---------- */
-  .head-right { display: flex; align-items: baseline; gap: 1rem; }
+  /* The view buttons never shrink; when the status block beside them needs
+     more room, it wraps below instead of squeezing them. */
+  .head-right { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1rem; }
   .modes {
-    display: inline-flex; border: 1px solid var(--rule);
+    display: inline-flex; flex-shrink: 0; border: 1px solid var(--rule);
     border-radius: 0.375rem; overflow: hidden;
   }
   .modes button {
@@ -563,6 +577,34 @@ PAGE = """<!doctype html>
   .modes button + button { border-left: 1px solid var(--rule); }
   .modes button.on { background: var(--surface); color: var(--text); }
   .modes button:focus-visible { outline: 2px solid var(--live); outline-offset: -2px; }
+
+  /* ---------- Refresh button (phone version, owner only) ---------- */
+  .refresh {
+    margin-top: 0.35rem; background: transparent; color: var(--text);
+    border: 1px solid var(--dim); border-radius: 999px; font: inherit;
+    font-size: 0.75rem; padding: 0.2rem 0.85rem; cursor: pointer;
+  }
+  .refresh:disabled { color: var(--dim); border-color: var(--rule); cursor: default; }
+  .refresh:focus-visible { outline: 2px solid var(--live); outline-offset: 2px; }
+  #refresh-note { margin: 0.3rem 0 0 auto; max-width: 17rem; font-size: 0.72rem; color: var(--close); }
+  #refresh-setup {
+    margin-top: 1rem; padding: 0.8rem 0.9rem; border-radius: 0.375rem;
+    background: var(--surface); border: 1px solid var(--rule); font-size: 0.85rem;
+  }
+  #refresh-setup input {
+    display: block; width: 100%; margin-top: 0.5rem; padding: 0.5rem 0.6rem;
+    background: rgba(255, 255, 255, 0.04); color: var(--text);
+    border: 1px solid var(--rule); border-radius: 0.375rem;
+    font: inherit; font-size: 1rem;   /* 16px keeps a phone from zooming in on focus */
+  }
+  #refresh-setup .rs-row { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+  #refresh-setup .rs-row button {
+    background: transparent; color: var(--text); border: 1px solid var(--dim);
+    border-radius: 999px; font: inherit; font-size: 0.8rem; padding: 0.25rem 0.9rem; cursor: pointer;
+  }
+  #refresh-setup .rs-note { margin-top: 0.4rem; color: var(--close); font-size: 0.78rem; }
+  #refresh-setup .rs-dim { color: var(--dim); font-size: 0.78rem; margin-top: 0.25rem; }
+  html.embed .refresh, html.embed #refresh-note, html.embed #refresh-setup { display: none; }
 
   #notices {
     margin-top: 1rem; padding: 0.7rem 0.9rem; border-radius: 0.375rem;
@@ -829,9 +871,12 @@ PAGE = """<!doctype html>
       <div class="meta">
         <div id="live-count"></div>
         <div id="updated"></div>
+        <button type="button" id="refresh-btn" class="refresh" hidden>Refresh</button>
+        <div id="refresh-note" hidden></div>
       </div>
     </div>
   </header>
+  <div id="refresh-setup" hidden></div>
   <div id="notices" hidden></div>
   <main id="fantasy"></main>
   <main id="board"></main>
@@ -1898,13 +1943,15 @@ function render(data) {
   }
 }
 
-async function refresh() {
+async function refresh(bust) {
   let data;
   try {
     // The phone file changes every few minutes; the minute stamp lets the
-    // browser reuse it within a minute but never longer.
+    // browser reuse it within a minute but never longer. The Refresh
+    // button passes its own stamp so each check gets fresh data.
+    const stamp = bust || Math.floor(Date.now() / 60000);
     const url = SITE
-      ? `${SITE.dataUrl}?t=${Math.floor(Date.now() / 60000)}`
+      ? `${SITE.dataUrl}?t=${stamp}`
       : "/api/dashboard";
     const response = await fetch(url);
     data = await response.json();
@@ -1920,6 +1967,262 @@ async function refresh() {
   render(data);
   applyFlashes(changes);
 }
+
+/* ---------- Refresh button (phone version, owner only) ----------
+   Hidden until a GitHub token is saved in this browser, from the setup
+   link (?setup=refresh) or by tapping the week title five times. The
+   button asks GitHub to start the "Publish dashboard" build, then checks
+   for the new data every few seconds and redraws the page when it lands.
+   The token never leaves this browser except in the request to GitHub. */
+const REFRESH_POLL_MS = 10000;
+const REFRESH_TIMEOUT_MS = 6 * 60 * 1000;
+const REFRESH_COOLDOWN_MS = 60000;
+const REFRESH_WORKFLOW = "site.yml";
+const REFRESH_BRANCH = "main";
+
+// A GitHub Pages address is username.github.io/repository/, which names
+// the repository without being told.
+function repoFromLocation(host, path) {
+  const match = /^([^.]+)\\.github\\.io$/i.exec(host || "");
+  const first = (path || "").split("/").filter(Boolean)[0];
+  return match && first ? `${match[1]}/${first}` : null;
+}
+
+function storeGet(key) { try { return localStorage.getItem(key); } catch (err) { return null; } }
+function storeSet(key, value) { try { localStorage.setItem(key, value); return true; } catch (err) { return false; } }
+function storeDel(key) { try { localStorage.removeItem(key); } catch (err) { /* nothing to remove */ } }
+
+function refreshRepo() {
+  return storeGet("refresh:repo") || repoFromLocation(location.hostname, location.pathname);
+}
+
+function refreshEnabled() {
+  return !!(SITE && !EMBED && storeGet("refresh:token") && refreshRepo());
+}
+
+const REFRESH = { busy: false, timer: null };
+
+function refreshNote(text) {
+  const box = document.getElementById("refresh-note");
+  box.textContent = text || "";
+  box.hidden = !text;
+}
+
+function refreshLabel(text, disabled) {
+  const button = document.getElementById("refresh-btn");
+  button.textContent = text;
+  button.disabled = !!disabled;
+}
+
+function clockText(ms) {
+  const seconds = Math.floor(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+// Idle, or counting down the pause that follows a press.
+function refreshIdle() {
+  clearTimeout(REFRESH.timer);
+  const wait = REFRESH_COOLDOWN_MS - (Date.now() - Number(storeGet("refresh:last") || 0));
+  if (wait > 0) {
+    refreshLabel(`Wait ${Math.ceil(wait / 1000)}s`, true);
+    REFRESH.timer = setTimeout(refreshIdle, 1000);
+  } else {
+    refreshLabel("Refresh", false);
+  }
+}
+
+function refreshProblem(status, repo) {
+  if (status === 401) return "GitHub rejected the token. It may have expired. Open the setup link to replace it.";
+  if (status === 403) return "The token can't start builds. It needs Actions set to Read and write for this repository.";
+  if (status === 404) return `GitHub can't find ${repo} or ${REFRESH_WORKFLOW}. Check the repository name and the token's repository access.`;
+  if (status === 422) return `${REFRESH_WORKFLOW} doesn't accept manual starts. It needs workflow_dispatch.`;
+  return `GitHub answered ${status}. Try again in a minute.`;
+}
+
+async function startRefresh() {
+  if (REFRESH.busy || !refreshEnabled()) return;
+  if (Date.now() - Number(storeGet("refresh:last") || 0) < REFRESH_COOLDOWN_MS) return;
+  REFRESH.busy = true;
+  clearTimeout(REFRESH.timer);
+  refreshNote("");
+  refreshLabel("Starting...", true);
+
+  const repo = refreshRepo();
+  const before = LAST && LAST.build ? LAST.build.at : null;
+  let response;
+  try {
+    response = await fetch(
+      `https://api.github.com/repos/${repo}/actions/workflows/${REFRESH_WORKFLOW}/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${storeGet("refresh:token")}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ref: REFRESH_BRANCH }),
+      }
+    );
+  } catch (err) {
+    REFRESH.busy = false;
+    refreshNote("Couldn't reach GitHub. Check your connection and try again.");
+    refreshIdle();
+    return;
+  }
+  // A failed start doesn't begin the pause, so a fixed problem retries at once.
+  if (response.status !== 204) {
+    REFRESH.busy = false;
+    refreshNote(refreshProblem(response.status, repo));
+    refreshIdle();
+    return;
+  }
+  storeSet("refresh:last", String(Date.now()));
+  waitForBuild(before, Date.now());
+}
+
+function waitForBuild(before, started) {
+  let lastCheck = started;
+  let checking = false;
+
+  const finish = (label, note) => {
+    REFRESH.busy = false;
+    clearTimeout(REFRESH.timer);
+    refreshNote(note || "");
+    if (label) {
+      refreshLabel(label, true);
+      REFRESH.timer = setTimeout(refreshIdle, 3000);
+    } else {
+      refreshIdle();
+    }
+  };
+
+  const step = async () => {
+    const now = Date.now();
+    refreshLabel(`Refreshing ${clockText(now - started)}`, true);
+    if (!checking && now - lastCheck >= REFRESH_POLL_MS) {
+      checking = true;
+      lastCheck = now;
+      await refresh(now);
+      checking = false;
+      const at = LAST && LAST.build ? LAST.build.at : null;
+      if (at && at !== before) return finish("Updated");
+    }
+    if (now - started >= REFRESH_TIMEOUT_MS) {
+      return finish(null, `No new data after ${Math.round(REFRESH_TIMEOUT_MS / 60000)} minutes. ` +
+        "The build may be queued or may have failed; check the Actions tab on GitHub.");
+    }
+    REFRESH.timer = setTimeout(step, 1000);
+  };
+  REFRESH.timer = setTimeout(step, 1000);
+}
+
+/* ----- setup: save or remove the token ----- */
+
+function stripSetupParams() {
+  try {
+    const url = new URL(location.href);
+    url.searchParams.delete("setup");
+    url.searchParams.delete("repo");
+    history.replaceState(null, "", url.pathname + url.search + url.hash);
+  } catch (err) { /* the address bar just keeps the extra text */ }
+}
+
+function showRefreshSetup() {
+  if (!SITE || EMBED) return;
+  const box = document.getElementById("refresh-setup");
+  const saved = !!storeGet("refresh:token");
+  const known = refreshRepo();
+  const hint = new URLSearchParams(location.search).get("repo") || "";
+  box.innerHTML = saved
+    ? `<b>Refresh is set up on this device.</b>
+       <div class="rs-dim">Repository: ${esc(known || "unknown")}</div>
+       <div class="rs-row">
+         <button type="button" data-rs="remove">Remove token</button>
+         <button type="button" data-rs="close">Close</button>
+       </div>`
+    : `<b>Set up the Refresh button.</b>
+       <div class="rs-dim">Paste a GitHub token that can start builds for this repository. It stays in this browser only.</div>
+       ${known ? "" : `<input id="rs-repo" type="text" autocomplete="off" autocapitalize="off"
+          spellcheck="false" placeholder="owner/repository" value="${attr(hint)}">`}
+       <input id="rs-token" type="password" autocomplete="off" autocapitalize="off"
+          spellcheck="false" placeholder="Paste token">
+       <div class="rs-note" id="rs-note"></div>
+       <div class="rs-row">
+         <button type="button" data-rs="save">Save</button>
+         <button type="button" data-rs="close">Cancel</button>
+       </div>`;
+  box.hidden = false;
+}
+
+function closeRefreshSetup() {
+  const box = document.getElementById("refresh-setup");
+  box.hidden = true;
+  box.innerHTML = "";          // the token field leaves the page with it
+  stripSetupParams();
+}
+
+function saveRefreshSetup() {
+  const note = document.getElementById("rs-note");
+  const token = (document.getElementById("rs-token").value || "").trim();
+  const repoField = document.getElementById("rs-repo");
+  const repo = (repoField ? repoField.value : refreshRepo() || "").trim();
+  if (!/^(github_pat_|ghp_)[A-Za-z0-9_]+$/.test(token)) {
+    note.textContent = "That doesn't look like a GitHub token. It starts with github_pat_.";
+    return;
+  }
+  if (!/^[\\w.-]+\\/[\\w.-]+$/.test(repo)) {
+    note.textContent = "Enter the repository as owner/name.";
+    return;
+  }
+  if (!storeSet("refresh:token", token)) {
+    note.textContent = "This browser wouldn't save the token. Private browsing can block it.";
+    return;
+  }
+  storeSet("refresh:repo", repo);
+  storeDel("refresh:last");
+  closeRefreshSetup();
+  initRefresh();
+}
+
+function removeRefreshToken() {
+  clearTimeout(REFRESH.timer);
+  REFRESH.busy = false;
+  ["refresh:token", "refresh:repo", "refresh:last"].forEach(storeDel);
+  closeRefreshSetup();
+  initRefresh();
+}
+
+function initRefresh() {
+  const on = refreshEnabled();
+  document.getElementById("refresh-btn").hidden = !on;
+  if (!on) refreshNote("");
+  else if (!REFRESH.busy) refreshIdle();
+}
+
+document.getElementById("refresh-btn").addEventListener("click", startRefresh);
+document.getElementById("refresh-setup").addEventListener("click", event => {
+  const action = event.target.closest("[data-rs]");
+  if (!action) return;
+  if (action.dataset.rs === "save") saveRefreshSetup();
+  else if (action.dataset.rs === "remove") removeRefreshToken();
+  else closeRefreshSetup();
+});
+
+// Five taps on the week title within three seconds opens the setup, for a
+// home-screen app that has no address bar to type the setup link into.
+let titleTaps = [];
+document.getElementById("title").addEventListener("click", () => {
+  if (!SITE || EMBED) return;
+  const now = Date.now();
+  titleTaps = titleTaps.filter(t => now - t < 3000).concat(now);
+  if (titleTaps.length >= 5) { titleTaps = []; showRefreshSetup(); }
+});
+
+if (SITE && !EMBED && new URLSearchParams(location.search).get("setup") === "refresh") {
+  showRefreshSetup();
+}
+initRefresh();
 
 function setMode(mode) {
   MODE = mode;
@@ -1977,7 +2280,7 @@ document.getElementById("tv").addEventListener("click", event => {
 refresh();
 // The phone file only changes every few minutes, so checking once a
 // minute is plenty there.
-setInterval(refresh, SITE ? 60000 : 15000);
+setInterval(() => refresh(), SITE ? 60000 : 15000);
 </script>
 </body>
 </html>
