@@ -25,7 +25,11 @@ import pins
 import players
 import poller
 import rooting
-import sheet_sync
+try:
+    import sheet_sync   # laptop only: imports the Google Sheet's file from GitHub
+except ImportError:
+    # The phone build on GitHub doesn't need it, and shouldn't fail without it.
+    sheet_sync = None
 from clock import (
     describe,
     format_remaining,
@@ -98,7 +102,7 @@ async def lifespan(app: FastAPI):
     tick()
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.add_job(tick, "interval", seconds=TICK_SECONDS, id="poll")
-    if sheet_sync.enabled():
+    if sheet_sync and sheet_sync.enabled():
         # Rooting interests sent from the Google Sheet, checked every 2
         # minutes and once right away.
         scheduler.add_job(sheet_sync.sync_once, "interval",
@@ -234,7 +238,8 @@ def dashboard_data():
         "players": roster_view,
         # On the laptop, problems from the Google Sheet show in the same
         # yellow notice the phone uses. The phone build replaces this.
-        **({"build": {"notes": sheet_sync.notes()}} if sheet_sync.notes() else {}),
+        **({"build": {"notes": sheet_sync.notes()}}
+           if sheet_sync and sheet_sync.notes() else {}),
     }
 
 
