@@ -176,10 +176,15 @@ def _fix_words(words):
 # column reads the same game, so it doesn't matter which one you pick.
 TEAM_WORDS = {
     "spread": "win by",
-    "total pts": "points", "total points": "points", "team total": "points",
+    # One team's own score: say "Team Total" or "Team Points".
+    "team total": "points", "team points": "points", "team pts": "points",
     "pts": "points", "points": "points",
+    # The game's combined score. "Total Points" and "Total Pts" mean this,
+    # as in a sportsbook's over/under. The Team column picks which game, so
+    # either team in it reads the same one.
     # The generated line is reread by rooting.parse_text, which expects
     # "game total" with a space, not the code's internal "game_total".
+    "total pts": "game total", "total points": "game total",
     "game total": "game total", "combined points": "game total",
     "combined score": "game total", "total score": "game total",
 }

@@ -375,8 +375,14 @@ the Team column always decides the team:
 | Jaguars Moneyline | Team wins |
 | Patriots 7.5+ Spread | Team wins by more than 7.5, so 8 or more |
 | San Francisco 49ers -2.5 Spread | Same as "2.5+ Spread": favored by 2.5, so wins by 3 or more |
-| Packers 26.5+ Total Pts | Team scores at least 26.5, so 27 or more |
-| ATL vs TB 43.5+ Game Total | The two teams' combined score is at least 43.5, so 44 or more. Either team works in the Team column, since it's the same game. "Combined Points" and "Total Score" read the same way. |
+| Bears vs Buccaneers 44.5+ Total Points | The game's combined score, both teams added together, is at least 44.5, so 45 or more. The Team column picks the game, and either team in it reads the same one. "Total Pts" means the same. |
+| Packers 26.5+ Team Total | One team's own score is at least 26.5, so 27 or more. "Team Points" reads the same way. |
+| ATL vs TB 43.5+ Game Total | Same as "Total Points": the combined score. "Combined Points" and "Total Score" read the same way. |
+
+**"Total" means the whole game.** "Total Points" and "Total Pts" add both teams'
+scores, as a sportsbook's over/under does. Before Week 9 they read one team's own
+score, so a row like "Packers 26.5+ Total Pts" now means a combined 26.5 or more.
+Write "Packers 26.5+ Team Total" for Green Bay's own score.
 
 Any stat the importer knows works after the number, such as Rush Yds, Pass Yds,
 Rec Yds, Rec, Rush + Rec Yds, Pass TDs, Completions, Sacks, or Field Goals. Longer

@@ -56,7 +56,8 @@ LOGO = "https://a.espncdn.com/i/teamlogos/nfl/500/{lower}.png"
 #   5: "-2.5 Spread" lines, and "Rushing + Receiving Yds" style stat names
 #   6: rooting_interests.csv sent by the Google Sheet's checkbox
 #   7: "Game Total" reads as both teams' combined score
-IMPORT_VERSION = "7"
+#   8: "Total Pts" and "Total Points" mean the combined score; "Team Total" is one team's
+IMPORT_VERSION = "8"
 
 # A problem worded this way came from ESPN refusing a roster lookup,
 # which usually clears on its own, so that file is tried again next run.
