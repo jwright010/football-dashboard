@@ -1,0 +1,33 @@
+{
+  "season": 2026,
+  "week": 11,
+  "league": "752951",
+  "me": {
+    "name": "Sunscreen and Tums",
+    "lineup": [
+      ["QB", "Caleb Williams", "CHI"],
+      ["RB", "Bhayshul Tuten", "JAX"],
+      ["RB", "D'Andre Swift", "CHI"],
+      ["WR", "Jameson Williams", "DET"],
+      ["WR", "Rashee Rice", "KC"],
+      ["TE", "Brock Bowers", "LV"],
+      ["W/R/T", "Kyle Monangai", "CHI"],
+      ["K", "Ka'imi Fairbairn", "HOU"],
+      ["DEF", "Broncos", "DEN"]
+    ]
+  },
+  "opponent": {
+    "name": "The Dom-inator's",
+    "lineup": [
+      ["QB", "Josh Allen", "BUF"],
+      ["RB", "Jonathan Taylor", "IND"],
+      ["RB", "Ollie Gordon II", "MIA"],
+      ["WR", "Garrett Wilson", "NYJ"],
+      ["WR", "Emeka Egbuka", "TB"],
+      ["TE", "George Kittle", "SF"],
+      ["W/R/T", "Parker Washington", "JAX"],
+      ["K", "Spencer Shrader", "IND"],
+      ["DEF", "Lions", "DET"]
+    ]
+  }
+}
