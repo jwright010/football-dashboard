@@ -355,6 +355,18 @@ def _grade(direction, target, current, state, monotonic=True):
     return "pending" if state == "pre" else "live"
 
 
+def shown_target(direction, target):
+    """The number printed after the slash, as in 4 of 4.
+
+    An "at least 4" goal is stored as "over 3", so the stored number is one
+    short of what the goal needs. The bar has always measured against the real
+    goal line; this prints the same number. An under goal prints as stored.
+    """
+    if direction == "over" and target == int(target):
+        return int(target) + 1
+    return int(target) if target == int(target) else target
+
+
 def _progress(direction, target, current):
     """Fraction of the bar to fill, 0 to 1.
 
@@ -570,7 +582,7 @@ def week_detail(season, week):
                 else r["target"]
             )
             goal_text = f"{label} {r['direction']} {target}"
-            target_text = str(target)
+            target_text = str(shown_target(r["direction"], r["target"]))
 
         opponent = ""
         if game:

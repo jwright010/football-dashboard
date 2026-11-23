@@ -417,6 +417,10 @@ PAGE = """<!doctype html>
   .pin:disabled { opacity: 0.5; cursor: progress; }
   .pin:focus-visible { outline: 2px solid var(--live); outline-offset: 1px; }
   .pl-meta { font-size: 0.75rem; color: var(--faint); margin-left: 0.4375rem; white-space: nowrap; }
+  /* The My Players tab: the jersey number sits under the logo in the same
+     size and color as the team and position text beside the name. */
+  .pl-side { display: flex; flex-direction: column; align-items: center; flex: 0 0 auto; gap: 0.15rem; }
+  .pl-jersey { font-size: 0.75rem; color: var(--faint); white-space: nowrap; }
   .pl-when { font-size: 0.75rem; color: var(--faint); margin-top: 0.1875rem; }
   .pl.islive .pl-when { color: var(--live); }
 
@@ -1178,7 +1182,9 @@ function goalBlock(g) {
   </div>`;
 }
 
-function playerRowMerged(p) {
+// opts.jersey puts the player's jersey number under the logo. Pass options
+// explicitly: a bare .map(playerRowMerged) would hand over the list index.
+function playerRowMerged(p, opts) {
   const game = p.game;
   const team = game ? game.abbrev : "";
   const meta = [team, p.position].filter(Boolean).join(" \u00b7 ");
@@ -1196,8 +1202,13 @@ function playerRowMerged(p) {
   const goals = p.goals.map(goalBlock).join("");
   const hasGoals = p.goals.length > 0;
 
+  const logo = logoTag(p.team_abbrev || team);
+  const side = opts && opts.jersey
+    ? `<div class="pl-side">${logo}${p.jersey ? `<div class="pl-jersey">#${esc(p.jersey)}</div>` : ""}</div>`
+    : logo;
+
   return `<div class="pl${p.is_live ? " islive" : ""}">
-    ${logoTag(p.team_abbrev || team)}
+    ${side}
     <div class="pl-body">
       <div class="pl-head">
         <span>
@@ -1250,7 +1261,7 @@ function playersCard(pv) {
       ${bits.join("")}
     </div>
     <div class="player-group" style="margin-top:0.5rem">
-      ${pv.players.map(playerRowMerged).join("")}
+      ${pv.players.map(p => playerRowMerged(p)).join("")}
     </div>
   </div>`;
 }
@@ -1436,10 +1447,10 @@ function nextKickoff(data) {
   return next ? next.kickoff_local : "";
 }
 
-function playersList(players, emptyText) {
+function playersList(players, emptyText, opts) {
   if (!players.length) return `<div class="note">${emptyText}</div>`;
   return `<div class="matchup"><div class="player-group" style="margin-top:0">
-    ${players.map(playerRowMerged).join("")}</div></div>`;
+    ${players.map(p => playerRowMerged(p, opts)).join("")}</div></div>`;
 }
 
 /* ---------- TV tabs ---------- */
@@ -1481,8 +1492,8 @@ function tabPlayers(data) {
   const live = everyone.filter(p => p.game_state === "in");
   const later = everyone.filter(p => p.game_state !== "in");
   return `<div class="cols2">
-    <section><h2>Live</h2>${playersList(live, "Nobody live right now.")}</section>
-    <section><h2>Not started</h2>${playersList(later, "Nobody left to play.")}</section>
+    <section><h2>Live</h2>${playersList(live, "Nobody live right now.", { jersey: true })}</section>
+    <section><h2>Not started</h2>${playersList(later, "Nobody left to play.", { jersey: true })}</section>
   </div>`;
 }
 

@@ -79,6 +79,7 @@ player-level crosswalk needed.
 | `sheet_sync.py` | Laptop: imports the Google Sheet's file from GitHub every 2 minutes |
 | `send_to_dashboard.gs` | Google Apps Script for the sheet's Send to dashboard checkbox; lives in the sheet, not GitHub |
 | `pins.py` | Players pinned to Top Players, one set per week |
+| `jerseys.py` | Jersey numbers for the My Players tab, saved in the database from ESPN's rosters |
 | `fetch_logos.py` | One-time download of the 32 team logos |
 | `rooting.py` | Rooting interests: parsing, storage, grading |
 | `boxscore.py` | ESPN box score reader and stat catalog |
@@ -291,7 +292,7 @@ stays visible in every view and on every tab, so switching is always one click.
 | Tab | Shows |
 |---|---|
 | Home | Your live players; fantasy summaries; your Pick'em status |
-| My Players | Everyone, in two columns: live, and not started |
+| My Players | Everyone, in two columns: live, and not started. Each player's jersey number sits under the logo, in the same size and color as the team and position text. |
 | Fantasy | Each head-to-head, colored by projected margin |
 | Rooting Interests | Every goal with a progress bar and an on-track verdict. Goals still in play first, then not started, then goals already decided in a live game, then finished games |
 | BOZO | Your BOZO interests as cards in the Top Players style, without fantasy lines: logo and name; team and position; the game line, amber while live; your wording with the live number. Moneylines and spreads show the team's current margin, like "+3". The number is green when hit or on track, red when missed or off track, and gray before kickoff. Two summary lines sit on top: "X of Y hit" and "X in play, Y remaining, Z finished". Finished counts goals settled either way, including one decided while its game is still going, so the three numbers always add up to the total. |
@@ -378,6 +379,19 @@ the Team column always decides the team:
 | Bears vs Buccaneers 44.5+ Total Points | The game's combined score, both teams added together, is at least 44.5, so 45 or more. The Team column picks the game, and either team in it reads the same one. "Total Pts" means the same. |
 | Packers 26.5+ Team Total | One team's own score is at least 26.5, so 27 or more. "Team Points" reads the same way. |
 | ATL vs TB 43.5+ Game Total | Same as "Total Points": the combined score. "Combined Points" and "Total Score" read the same way. |
+
+**The number after the slash is the goal line.** "4+ Rec" shows `2 / 4`, so the
+number printed is what the goal needs. A half-point target rounds up, since
+stats count whole numbers: "74.5+ Rec Yds" shows `/ 75`. An explicit "over 100"
+means strictly more, so it shows `/ 101`. An under goal shows its own number.
+Goals stored as "over 3" for "at least 4" are unchanged underneath; only the
+printed number moved, to agree with the progress bar.
+
+**Jersey numbers** come from ESPN's team rosters. A team's roster is fetched once
+and saved in the database, one row per player, so a number costs no request
+afterward and the phone version's carried database asks ESPN about a team at most
+once a day. A team defense, or a player ESPN lists without a number, shows none.
+If ESPN can't be reached the numbers are left out and the page works as before.
 
 **"Total" means the whole game.** "Total Points" and "Total Pts" add both teams'
 scores, as a sportsbook's over/under does. Before Week 9 they read one team's own

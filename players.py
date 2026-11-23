@@ -26,6 +26,11 @@ import pins
 import rooting
 import roster
 
+try:
+    import jerseys   # saves jersey numbers; the page works without it
+except ImportError:
+    jerseys = None
+
 log = logging.getLogger("players")
 
 # Where a player's game is, for sorting and display.
@@ -192,6 +197,7 @@ def build():
     for row in rows:
         # Every fantasy team and every rooting goal is its own interest.
         row["interests"] = len(row["fantasy"]) + len(row["goals"])
+        row["jersey"] = _jersey(row)
 
     # 1. game state: live, then not started
     # 2. total interests
@@ -269,6 +275,13 @@ def annotate_rooting(detail):
         item["player_key"] = key
         item["pinned"] = key in pinned
     return detail
+
+
+def _jersey(row):
+    """A player's jersey number, or "" for a team defense or when unknown."""
+    if jerseys is None or row["key"].startswith("defense|"):
+        return ""
+    return jerseys.lookup(row["pro_team_espn_id"], row["name"], row.get("athlete_id"))
 
 
 def _blank(entry):
