@@ -1,0 +1,33 @@
+{
+  "season": 2026,
+  "week": 12,
+  "league": "752951",
+  "me": {
+    "name": "Sunscreen and Tums",
+    "lineup": [
+      ["QB", "Caleb Williams", "CHI"],
+      ["RB", "Bhayshul Tuten", "JAX"],
+      ["RB", "D'Andre Swift", "CHI"],
+      ["WR", "Jameson Williams", "DET"],
+      ["WR", "Rashee Rice", "KC"],
+      ["TE", "Brock Bowers", "LV"],
+      ["W/R/T", "Bijan Robinson", "ATL"],
+      ["K", "Ka'imi Fairbairn", "HOU"],
+      ["DEF", "Broncos", "DEN"]
+    ]
+  },
+  "opponent": {
+    "name": "The Inactive List",
+    "lineup": [
+      ["QB", "Matthew Stafford", "LAR"],
+      ["RB", "Derrick Henry", "BAL"],
+      ["RB", "Jahmyr Gibbs", "DET"],
+      ["WR", "Tee Higgins", "CIN"],
+      ["WR", "Drake London", "ATL"],
+      ["TE", "Dallas Goedert", "PHI"],
+      ["W/R/T", "Travis Etienne Jr.", "NO"],
+      ["K", "Tyler Bass", "BUF"],
+      ["DEF", "Buccaneers", "TB"]
+    ]
+  }
+}
